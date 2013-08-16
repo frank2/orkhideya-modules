@@ -1,0 +1,60 @@
+#!/bin/bash
+
+source orkhideya
+ork_include if
+ork_include iw
+ork_include proc
+
+function qemu_label
+{
+   local _device="$1"
+   local _ap="$2"
+
+   echo "qemu_supplicant-$_device-$_ap"
+   return 0
+}
+
+function qemu_command
+{
+}
+
+function qemu_start
+{
+   local _device="$1"
+   ! if_dev_exists "$_device" && return 1
+
+   local _ap="$2"
+   ! iw_ap_exists "$_ap" && return 2
+   qemu_is_running "$_device" "$_ap" && return 0
+
+   local _label="$(qemu_label "$_device" "$_ap")"
+   ! proc_label_spawn_silent "$_label" "$(qemu_command "$_device" "$_ap")" && return 3
+   return 0
+}
+
+function qemu_stop
+{
+   local _device="$1"
+   ! if_dev_exists "$_device" && return 1
+
+   local _ap="$2"
+   ! iw_ap_exists "$_ap" && return 2
+   ! qemu_is_running "$_device" "$_ap" && return 0
+
+   local _label="$(qemu_label "$_device" "$_ap")"
+   ! proc_label_kill "$_label" && return 3
+   return 0
+}
+
+function qemu_is_running
+{
+   local _device="$1"
+   ! if_dev_exists "$_device" && return 1
+
+   local _ap="$2"
+   ! iw_ap_exists "$_ap" && return 2
+
+   local _label="$(qemu_label "$_device" "$_ap")"
+   ! proc_label_is_running "$_label" && return 3
+   return 0
+}

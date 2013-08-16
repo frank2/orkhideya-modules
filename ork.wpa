@@ -1,0 +1,86 @@
+#!/bin/bash
+
+source orkhideya
+ork_include if
+ork_include iw
+ork_include proc
+
+function wpa_label
+{
+   local _device="$1"
+   local _ap="$2"
+
+   echo "wpa_supplicant-$_device-$_ap"
+   return 0
+}
+
+function wpa_command
+{
+   local _device="$1"
+   ! if_dev_exists "$_device" && return 1
+
+   local _ap="$2"
+   ! iw_ap_exists "$_ap" && return 2
+
+   local _args="${@:3}"
+
+   local _interface="$(if_dev_interface "$_device")"
+   [ -z "$_interface" ] && return 3
+   ! if_interface_exists "$_interface" && return 4
+
+   local _label="$(wpa_label "$_device" "$_ap")"
+   local _commandline="wpa_supplicant -i "$_interface""
+   local _config_file="$(iw_ap_config_file "$_ap")"
+
+   if [ -n "$_config_file" -a -r "$_config_file" ]; then
+      _commandline=""$_commandline" -c "$_config_file""
+   fi
+
+   local _pidfile="$(proc_label_pid_file "$_label")"
+   _commandline=""$_commandline" -P "$_pidfile""
+   _commandline=""$_commandline" $_args"
+
+   echo "$_commandline"
+   return 0
+}
+
+function wpa_start
+{
+   local _device="$1"
+   ! if_dev_exists "$_device" && return 1
+
+   local _ap="$2"
+   ! iw_ap_exists "$_ap" && return 2
+   wpa_is_running "$_device" "$_ap" && return 0
+
+   local _label="$(wpa_label "$_device" "$_ap")"
+   ! proc_label_spawn_silent "$_label" "$(wpa_command "$_device" "$_ap")" && return 3
+   return 0
+}
+
+function wpa_stop
+{
+   local _device="$1"
+   ! if_dev_exists "$_device" && return 1
+
+   local _ap="$2"
+   ! iw_ap_exists "$_ap" && return 2
+   ! wpa_is_running "$_device" "$_ap" && return 0
+
+   local _label="$(wpa_label "$_device" "$_ap")"
+   ! proc_label_kill "$_label" && return 3
+   return 0
+}
+
+function wpa_is_running
+{
+   local _device="$1"
+   ! if_dev_exists "$_device" && return 1
+
+   local _ap="$2"
+   ! iw_ap_exists "$_ap" && return 2
+
+   local _label="$(wpa_label "$_device" "$_ap")"
+   ! proc_label_is_running "$_label" && return 3
+   return 0
+}

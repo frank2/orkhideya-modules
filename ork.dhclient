@@ -1,0 +1,63 @@
+#!/bin/bash
+
+source orkhideya
+ork_include if
+ork_include proc
+
+function dhclient_label
+{
+   local _device="$1"
+
+   echo "dhclient-$_device"
+   return 0
+}
+
+function dhclient_command
+{
+   local _device="$1"
+   ! if_dev_exists "$_device" && return 1
+
+   local _args="${@:2}"
+
+   local _interface="$(if_dev_interface "$_device")"
+   [ -z "$_interface" ] && return 2
+   ! if_interface_exists "$_interface" && return 3
+
+   local _label="$(dhclient_label "$_device")"
+   local _pidfile="$(proc_label_pid_file "$_label")"
+
+   echo "dhclient -pf "$_pidfile" $_args "$_interface""
+   return 0
+}
+
+function dhclient_start
+{
+   local _device="$1"
+   ! if_dev_exists "$_device" && return 1
+   dhclient_is_running "$_device" && return 0
+
+   local _label="$(dhclient_label "$_device")"
+   ! proc_label_spawn_silent "$_label" "$(dhclient_command "$_device")" && return 3
+   return 0
+}
+
+function dhclient_stop
+{
+   local _device="$1"
+   ! if_dev_exists "$_device" && return 1 
+   ! dhclient_is_running "$_device" && return 0
+
+   local _label="$(dhclient_label "$_device")"
+   ! proc_label_kill "$_label" && return 3
+   return 0
+}
+
+function dhclient_is_running
+{
+   local _device="$1"
+   ! if_dev_exists "$_device" && return 1
+
+   local _label="$(dhclient_label "$_device")"
+   ! proc_label_is_running "$_label" && return 2
+   return 0
+}
