@@ -1,0 +1,126 @@
+#!/bin/bash
+
+source orkhideya
+ork_include if
+ork_include proc
+
+function dhcpd_label
+{
+   local _interface="$1"
+
+   echo "dhcpd-$_interface"
+   return 0
+}
+
+function dhcpd_root
+{
+   ork_configpath "dhcpd"
+   return 0
+}
+
+function dhcpd_config_root
+{
+   ork_pathcat "$(dhcpd_root)" "$ORK_DHCPD_CONFIGS"
+   return 0
+}
+
+function dhcpd_config_file
+{
+   _config="$1"
+   stdlib_filesearch "$(dhcpd_config_root)" "$(stdlib_pathify "$_config")" "config"
+   return 0
+}
+
+function dhcpd_config_exists
+{
+   _config="$1"
+   test -r "$(dhcpd_config_file "$_config")"
+   return $?
+}
+
+function dhcpd_config_build
+{
+   local _config="$1"
+   ! dhcpd_config_exists "$_config" && return 1
+
+   local _args="${@:2}"
+   local _config_file="$(dhcpd_config_file "$_config")"
+   [ ! -e "$_config_file" ] && return 2
+   [ ! -r "$_config_file" -o ! -x "$_config_file" ] && return 3
+
+   if [ -x "$_config_file" ]; then 
+      ! "$_config_file" $_args && return 4
+   else
+      ! cat "$_config_file" && return 5
+   fi
+
+   return 0
+}
+
+function dhcpd_command
+{
+   local _interface="$1"
+   ! if_interface_exists "$_interface" && return 1
+   
+   local _configfile="$2"
+   [ ! -r "$_configfile" ] && return 2
+
+   local _address="$(if_interface_address_get "$_interface" inet)"
+   [ -z "$_address" ] && return 3
+
+   local _args="${@:3}"
+   local _label="$(dhcpd_label "$_interface")"
+   local _pidfile="$(proc_label_pid_file "$_label")"
+   local _leasefile="$(stdlib_forcepath $(stdlib_tmpfile "$_label-leases"))"
+
+   if [ ! -r "$_leasefile" ]; then touch "$_leasefile"; fi
+
+   echo "dhcpd -pf "$_pidfile" -cf "$_configfile" -lf "$_leasefile" -s "$_address" $_args "$_interface""
+   return 0
+}
+
+function dhcpd_start
+{
+   local _interface="$1"
+   ! if_interface_exists "$_interface" && return 1
+
+   local _config="$2"
+   ! dhcpd_config_exists "$_config" && return 2
+   dhcpd_is_running "$_interface" && return 0
+
+   local _args="${@:3}"
+   local _label="$(dhcpd_label "$_interface")"
+   local _configfile="$(stdlib_tmpfile "$_label-config")"
+
+   ! dhcpd_config_build "$_config" "$_interface" > "$_configfile" && return 3
+   ! proc_label_spawn "$_label" "$(dhcpd_command "$_interface" "$_configfile" $_args)" && return 4
+   return 0
+}
+
+function dhcpd_stop
+{
+   local _interface="$1"
+   ! if_interface_exists "$_interface" && return 1 
+
+   local _label="$(dhcpd_label "$_interface")"
+   local _leasefile="$(stdlib_tmpfile "$_label-leases")"
+   local _configfile="$(stdlib_tmpfile "$_label-config")"
+
+   ! proc_label_kill "$_label" && return 3
+
+   shred -u "$_leasefile" &>/dev/null
+   shred -u "$_configfile" &>/dev/null
+   return 0
+}
+
+function dhcpd_is_running
+{
+   local _interface="$1"
+   ! if_interface_exists "$_interface" && return 1
+
+   local _label="$(dhcpd_label "$_interface")"
+   ! proc_label_is_running "$_label" && return 2
+   return 0
+}
+
+ORK_DHCPD_CONFIGS="configs"

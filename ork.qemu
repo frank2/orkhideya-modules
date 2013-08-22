@@ -4,57 +4,134 @@ source orkhideya
 ork_include if
 ork_include iw
 ork_include proc
+ork_include stdlib
 
 function qemu_label
 {
-   local _device="$1"
-   local _ap="$2"
+   local _machine="$1"
 
-   echo "qemu_supplicant-$_device-$_ap"
+   echo "qemu-$_machine"
    return 0
 }
 
-function qemu_command
+function qemu_root
 {
-}
-
-function qemu_start
-{
-   local _device="$1"
-   ! if_dev_exists "$_device" && return 1
-
-   local _ap="$2"
-   ! iw_ap_exists "$_ap" && return 2
-   qemu_is_running "$_device" "$_ap" && return 0
-
-   local _label="$(qemu_label "$_device" "$_ap")"
-   ! proc_label_spawn_silent "$_label" "$(qemu_command "$_device" "$_ap")" && return 3
+   ork_configpath "qemu"
    return 0
 }
 
-function qemu_stop
+function qemu_img_root
 {
-   local _device="$1"
-   ! if_dev_exists "$_device" && return 1
-
-   local _ap="$2"
-   ! iw_ap_exists "$_ap" && return 2
-   ! qemu_is_running "$_device" "$_ap" && return 0
-
-   local _label="$(qemu_label "$_device" "$_ap")"
-   ! proc_label_kill "$_label" && return 3
+   ork_pathcat "$(qemu_root)" "$ORK_QEMU_IMG_PATH"
    return 0
 }
 
-function qemu_is_running
+function qemu_vm_root
 {
-   local _device="$1"
-   ! if_dev_exists "$_device" && return 1
-
-   local _ap="$2"
-   ! iw_ap_exists "$_ap" && return 2
-
-   local _label="$(qemu_label "$_device" "$_ap")"
-   ! proc_label_is_running "$_label" && return 3
+   ork_pathcat "$(qemu_root)" "$ORK_QEMU_VM_PATH"
    return 0
 }
+
+function qemu_img_path
+{
+   local _image="$1"
+   ork_pathcat "$(qemu_img_root)" "$(stdlib_pathify "$_image")"
+   return $?
+}
+
+function qemu_vm_path
+{
+   local _vm="$1"
+   ork_pathcat "$(qemu_vm_root)" "$(stdlib_pathify "$_vm")"
+   return $?
+}
+
+function qemu_img_file
+{
+   local _image="$1" 
+   echo "$(qemu_img_path "$_image")/image"
+   return 0
+}
+
+function qemu_img_exists
+{
+   local _image="$1"
+   test -r "$(qemu_img_file "$_image")"
+   return $?
+}
+
+function qemu_vm_boot_file
+{
+   local _vm="$1" 
+   echo "$(qemu_vm_path "$_vm")/boot"
+   return 0
+}
+
+function qemu_vm_shutdown_file
+{
+   local _vm="$1" 
+   echo "$(qemu_vm_path "$_vm")/shutdown"
+   return 0
+}
+
+function qemu_vm_exists
+{
+   local _vm="$1"
+   test -x "$(qemu_vm_path "$_vm")"
+   return $?
+}
+
+function qemu_vm_boot
+{
+   local _vm="$1"
+   ! qemu_vm_exists "$_vm" && return 1
+
+   local _args="${@:2}"
+   local _boot_file="$(stdlib_filesearch "$(qemu_vm_root)" "$(stdlib_pathify "$_vm")" "boot")"
+   [ -z "$_boot_file" ] && return 2
+   [ ! -x "$_boot_file" ] && return 3
+   ! "$_boot_file" $_args && return 4
+   return 0
+}
+
+function qemu_vm_shutdown
+{
+   local _vm="$1"
+   ! qemu_vm_exists "$_vm" && return 1
+
+   local _args="${@:2}"
+   local _shutdown_file="$(stdlib_filesearch "$(qemu_vm_root)" "$(stdlib_pathify "$_vm")" "shutdown")"
+   [ -z "$_shutdown_file" ] && return 2
+   [ ! -x "$_shudown_file" ] && return 3
+   ! "$_shutdown_file" $_args && return 4
+   return 0
+}
+
+function qemu_arg_exists
+{
+   local _args="$1"
+   local _arg="$2"
+
+   test -n "$(echo "$_args" | egrep -o "([[:space:]]+-$_arg([[:space:]]+|,)|^-$_arg([[:space:]]+|,)|[[:space:]]+-$_arg\$)")"
+   return $?
+}
+
+function qemu_arg_default
+{
+   local _args="$1"
+   local _arg="$2"
+   local _value="${@:3}"
+
+   if ! qemu_arg_exists "$_args" "$_arg"; then
+      if [ -z "$_value" ]; then echo "-$_arg"
+      elif [ -n "$(echo "$_arg" | grep -o '[[:space:]]')" ]; then echo "-${_arg}${_value}"
+      else echo "-$_arg "$_value""
+      fi
+   fi
+
+   return 0
+}
+
+ORK_QEMU_IMG_PATH="img"
+ORK_QEMU_VM_PATH="vm"
+ork_reconfigure "qemu"

@@ -29,7 +29,7 @@ function wpa_command
    ! if_interface_exists "$_interface" && return 4
 
    local _label="$(wpa_label "$_device" "$_ap")"
-   local _commandline="wpa_supplicant -i "$_interface""
+   local _commandline="wpa_supplicant -dd -i "$_interface""
    local _config_file="$(iw_ap_config_file "$_ap")"
 
    if [ -n "$_config_file" -a -r "$_config_file" ]; then
@@ -54,7 +54,15 @@ function wpa_start
    wpa_is_running "$_device" "$_ap" && return 0
 
    local _label="$(wpa_label "$_device" "$_ap")"
-   ! proc_label_spawn_silent "$_label" "$(wpa_command "$_device" "$_ap")" && return 3
+
+   proc_label_spawn "$_label" "$(wpa_command "$_device" "$_ap")"
+   local _status="$?"
+
+   if [ "$_status" != "0" ]; then
+      stdout_error "WPA spawn status: $_status"
+      return 3
+   fi
+
    return 0
 }
 
