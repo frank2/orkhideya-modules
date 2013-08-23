@@ -86,11 +86,14 @@ function qemu_vm_boot
    local _vm="$1"
    ! qemu_vm_exists "$_vm" && return 1
 
-   local _args="${@:2}"
+   local _label="$2"
+   local _args="${@:3}"
    local _boot_file="$(stdlib_filesearch "$(qemu_vm_root)" "$(stdlib_pathify "$_vm")" "boot")"
    [ -z "$_boot_file" ] && return 2
    [ ! -x "$_boot_file" ] && return 3
-   ! "$_boot_file" $_args && return 4
+   ! "$_boot_file" "$_label" $_args && return 4
+
+   qemu_vm_monitor "$_vm" "$_label" $_args &>/dev/null &
    return 0
 }
 
@@ -99,11 +102,28 @@ function qemu_vm_shutdown
    local _vm="$1"
    ! qemu_vm_exists "$_vm" && return 1
 
-   local _args="${@:2}"
+   local _label="$2"
+   local _args="${@:3}"
    local _shutdown_file="$(stdlib_filesearch "$(qemu_vm_root)" "$(stdlib_pathify "$_vm")" "shutdown")"
    [ -z "$_shutdown_file" ] && return 2
-   [ ! -x "$_shudown_file" ] && return 3
-   ! "$_shutdown_file" $_args && return 4
+   [ ! -x "$_shutdown_file" ] && return 3
+   ! "$_shutdown_file" "$_label" $_args && return 4
+
+   return 0
+}
+
+function qemu_vm_monitor
+{
+   local _vm="$1"
+   ! qemu_vm_exists "$_vm" && return 1
+
+   local _label="$2"
+   ! proc_label_exists "$_label" && return 2
+
+   local _args="${@:3}"
+   while proc_label_is_running "$_label"; do sleep 3; done
+   ! qemu_vm_shutdown "$_vm" "$_label" $_args &>/dev/null && return 3
+
    return 0
 }
 
@@ -134,4 +154,6 @@ function qemu_arg_default
 
 ORK_QEMU_IMG_PATH="img"
 ORK_QEMU_VM_PATH="vm"
+ORK_QEMU_VM_HOST="localhost"
+
 ork_reconfigure "qemu"
