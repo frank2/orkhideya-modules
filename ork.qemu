@@ -60,6 +60,20 @@ function qemu_img_exists
    return $?
 }
 
+function qemu_img_fork
+{
+   local _image="$1"
+   ! qemu_img_exists "$_image" && return 1
+
+   local _args="${@:2}"
+
+   local _image_file="$(qemu_img_file "$_image")"
+
+   qemu-img create -f qcow2 -b "$_image_file" $_args
+   [ "$?" != "0" ] && return 3
+   return 0
+}
+
 function qemu_vm_boot_file
 {
    local _vm="$1" 
