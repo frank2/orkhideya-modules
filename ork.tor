@@ -1,0 +1,121 @@
+#!/bin/bash
+
+source orkhideya
+ork_include if
+ork_include proc
+
+function tor_label
+{
+   local _interface="$1"
+
+   echo "tor-$_interface"
+   return 0
+}
+
+function tor_root
+{
+   ork_configpath "tor"
+   return 0
+}
+
+function tor_config_root
+{
+   ork_pathcat "$(tor_root)" "$ORK_TOR_CONFIGS"
+   return 0
+}
+
+function tor_config_file
+{
+   _config="$1"
+   stdlib_filesearch "$(tor_config_root)" "$(stdlib_pathify "$_config")" "config"
+   return 0
+}
+
+function tor_config_exists
+{
+   _config="$1"
+   test -r "$(tor_config_file "$_config")"
+   return $?
+}
+
+function tor_config_build
+{
+   local _config="$1"
+   ! tor_config_exists "$_config" && return 1
+
+   local _args="${@:2}"
+   local _config_file="$(tor_config_file "$_config")"
+   [ ! -e "$_config_file" ] && return 2
+   [ ! -r "$_config_file" -o ! -x "$_config_file" ] && return 3
+
+   if [ -x "$_config_file" ]; then 
+      ! "$_config_file" $_args && return 4
+   else
+      ! cat "$_config_file" && return 5
+   fi
+
+   return 0
+}
+
+function tor_command
+{
+   local _interface="$1"
+   ! if_interface_exists "$_interface" && return 1
+   
+   local _configfile="$2"
+   [ ! -r "$_configfile" ] && return 2
+
+   local _args="${@:3}"
+
+   echo "tor -f "$_configfile" $_args"
+   return 0
+}
+
+function tor_start
+{
+   local _interface="$1"
+   ! if_interface_exists "$_interface" && return 1
+
+   local _config="$2"
+   if [ -z "$_config" -o "$_config" == "-" ]; then
+      _config="default"
+   fi
+
+   local _args="${@:3}"
+
+   ! tor_config_exists "$_config" && return 2
+   tor_is_running "$_interface" && return 0
+
+   local _label="$(tor_label "$_interface")"
+   local _configfile="$(stdlib_tmpfile "$_label-config")"
+
+   ! tor_config_build "$_config" "$_interface" $_args > "$_configfile" && return 3
+   ! proc_label_spawn "$_label" "$(tor_command "$_interface" "$_configfile" $_args)" && return 4
+   return 0
+}
+
+function tor_stop
+{
+   local _interface="$1"
+   ! if_interface_exists "$_interface" && return 1 
+
+   local _label="$(tor_label "$_interface")"
+   local _configfile="$(stdlib_tmpfile "$_label-config")"
+
+   ! proc_label_kill "$_label" && return 3
+
+   shred -u "$_configfile" &>/dev/null
+   return 0
+}
+
+function tor_is_running
+{
+   local _interface="$1"
+   ! if_interface_exists "$_interface" && return 1
+
+   local _label="$(tor_label "$_interface")"
+   ! proc_label_is_running "$_label" && return 2
+   return 0
+}
+
+ORK_TOR_CONFIGS="configs"
