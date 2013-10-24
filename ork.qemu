@@ -74,6 +74,34 @@ function qemu_img_fork
    return 0
 }
 
+function qemu_img_mount
+{
+   local _image="$1"
+   ! qemu_img_exists "$_image" && return 1
+
+   local _mount_label="mount-$_image"
+   proc_label_exists "$_mount_label" && return 0
+
+   local _next_block="$(cat /proc/partitions | grep -o 'nbd[[:digit:]]+' | sort -u -h -r | head -n2 | cut -b 4-)"
+   if [ -z "$_next_block" ]; then _next_block="nbd0"; else _next_block="nbd$(($_next_block+1))"; fi
+
+   local _image_file="$(qemu_img_file "$_image")"
+   ! proc_label_spawn "$_mount_label" "qemu-nbd -c /dev/$_next_block "$_image_file"" && return 3
+   return 0
+}
+
+function qemu_img_unmount
+{
+   local _image="$1"
+   ! qemu_img_exists "$_image" && return 1
+
+   local _mount_label="mount-$_image"
+   ! proc_label_exists "$_mount_label" && return 0
+
+   ! proc_label_kill "$_mount_label" && return 2
+   return 0
+}
+
 function qemu_vm_boot_file
 {
    local _vm="$1" 
@@ -107,7 +135,6 @@ function qemu_vm_boot
    [ ! -x "$_boot_file" ] && return 3
    ! "$_boot_file" "$_label" $_args && return 4
 
-   qemu_vm_monitor "$_vm" "$_label" $_args &>/dev/null &
    return 0
 }
 
@@ -132,11 +159,15 @@ function qemu_vm_monitor
    ! qemu_vm_exists "$_vm" && return 1
 
    local _label="$2"
-   ! proc_label_exists "$_label" && return 2
+   ! proc_label_exists "$_label" && return 3
 
    local _args="${@:3}"
+
+   # wait a few seconds to let the VM launch.
+   sleep 5
+
    while proc_label_is_running "$_label"; do sleep 3; done
-   ! qemu_vm_shutdown "$_vm" "$_label" $_args &>/dev/null && return 3
+   ! qemu_vm_shutdown "$_vm" "$_label" $_args &>/dev/null && return 4 
 
    return 0
 }
