@@ -153,6 +153,7 @@ function media_shelf_link
     test ! -e "$_full_path" && return 5
 
     local _link_file="$_shelf_path/link"
+
     if [ -L "$_link_file" ]; then
         ! unlink "$_link_file" && return 6
     fi
@@ -164,48 +165,61 @@ function media_shelf_link
 function media_catalog
 {
     local _filename="$1"
+    test -z "$_filename" && return 1
+
     local _identity="$(media_identity "$_filename")"
 
     if [ -z "$_identity" ]; then
-        return 1
+        return 2
     fi
+
+    local _last_file="$(echo "$_filename" | awk -F '/' '{ print $NF }')"
 
     if [ -d "$_filename" ]; then
         local _vault_identity="$(media_vault "$_identity")"
 
-        ! mkdir -p "$_vault_identity" && return 2
-        ! mv "$_filename"/* "$_vault_identity" && return 3
+        ! mkdir -p "$_vault_identity" && return 3
+        ! mv "$_filename"/* "$_vault_identity" && return 4
 
         media_metadata_set "$_identity" type vault
+        media_metadata_set "$_identity" alias "$_last_file"
 
         find -L "$_vault_identity" -type f | while read _catalog_file; do
             _file_identity="$(media_identity "$_catalog_file")"
             _relative_path="$(echo "$_catalog_file" | sed -r -e "s,^$_vault_identity/,,")"
 
+            media_metadata_set "$_identity" type content
             media_metadata_set "$_file_identity" vault "$_identity"
             media_metadata_set "$_file_identity" relative_path "$_relative_path"
+
             media_catalog "$_catalog_file"
         done
+
+        echo "$_identity"
+        return 0
     elif [ -r "$_filename" ]; then
         local _file_vault="$(media_metadata_get "$_identity" vault)"
-        local _last_file="$(echo "$_filename" | awk -F '/' '{ print $NF }')"
         local _vault_path=""
 
         if [ -z "$_file_vault" ]; then
-            vault_path="$(media_vault "$_identity")"
+            _vault_path="$(media_vault "$_identity")"
             test -d "$_vault_path" && return 4
             ! mkdir -p "$_vault_path" && return 5
 
+            media_metadata_set "$_identity" type content
             media_metadata_set "$_identity" vault "$_identity"
             media_metadata_set "$_identity" relative_path "$_last_file"
             
             ! mv "$_filename" "$_vault_path/$_last_file" && return 6
         else
-            vault_path="$(media_vault "$_file_vault")"
+            _vault_path="$(media_vault "$_file_vault")"
         fi
 
         ! chmod a-w "$_vault_path/$_last_file" && return 7
-        media_shelf_link "$_file_identity"
+        media_shelf_link "$_dentity"
+
+        echo "$_identity"
+        return 0
     else
         return 5
     fi
