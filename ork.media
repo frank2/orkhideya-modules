@@ -195,6 +195,7 @@ function media_catalog
             ! media_catalog "$_catalog_file" && return 5
         done
 
+        rm -rf "$_filename" &>/dev/null
         echo "$_identity"
         return 0
     elif [ -r "$_filename" ]; then
