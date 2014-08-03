@@ -1,0 +1,217 @@
+#!/bin/bash
+
+source orkhideya
+ork_include stdlib
+
+function media_depends
+{
+    ork_path_check sha256sum flac lame
+    return $?
+}
+
+function media_root
+{
+    ork_configpath "media"
+    return 0
+}
+
+function media_library # the library is for metadata on archive data
+{
+    ork_pathcat "$(media_root)" "$ORK_MEDIA_LIBRARY"
+    return 0
+}
+
+function media_archive # the archive is for raw data
+{
+    ork_pathcat "$(media_root)" "$ORK_MEDIA_ARCHIVE"
+    return 0
+}
+
+function media_identity
+{
+    local _filename="$1"
+
+    if [ "$_filename" != "-" -a -d "$_filename" ]; then
+        find -L "$_filename" -type f -exec cat "{}" \; | media_identity -
+        return $?
+    elif [ "$_filename" == "-" -o -r "$_filename" ]; then
+        sha256sum "$_filename" | awk '{ print $1 }'
+        return 0
+    else
+        return 1
+    fi
+}
+
+function media_identity_path
+{
+    local _identity="$1"
+    test -z "$_identity" && return 1
+
+    echo "${_identity:0:1}/${_identity:1:2}/$_identity"
+    return 0
+}
+
+function media_shelf
+{
+    local _identity="$1"
+    test -z "$_identity" && return 1
+
+    ork_pathcat "$(media_library)" "$(media_identity_path "$_identity")"
+    return 0
+}
+
+function media_vault
+{
+    local _identity="$1"
+    test -z "$_identity" && return 1
+
+    ork_pathcat "$(media_archive)" "$(media_identity_path "$_identity")"
+    return 0
+}
+
+function media_metadata_file
+{
+    local _identity="$1"
+    test -z "$_identity" && return 1
+
+    ork_pathcat "$(media_shelf "$_identity")" metadata
+    return 0
+}
+
+function media_metadata_set
+{
+    local _identity="$1"
+    test -z "$_identity" && return 1
+
+    local _shelf="$(media_shelf "$_identity")"
+
+    if [ ! -d "$_shelf" ]; then
+        mkdir -p "$_shelf"
+
+        if [ "$?" != "0" ]; then
+            return 1
+        fi
+    fi
+
+    local _metadata_file="$(media_metadata_file "$_identity")"
+
+    if [ ! -e "$_metadata_file" ]; then
+        touch "$_metadata_file"
+
+        if [ "$?" != "0" ]; then
+            return 2
+        fi
+    fi
+
+    local _tag="$2"
+    local _content="$3"
+
+    grep -v "^${_tag}:" "$_metadata_file" > "${_metadata_file}.new"
+
+    if [ -n "$_content" ]; then
+        ! echo "${_tag}:${_content}" >> "${_metadata_file}.new" && return 4
+    fi
+
+    ! mv "${_metadata_file}.new" "$_metadata_file" && return 5
+    return 0
+}
+
+function media_metadata_get
+{
+    local _identity="$1"
+    test -z "$_identity" && return 1
+
+    local _tag="$2"
+    test -z "$_tag" && return 2
+
+    local _metadata_file="$(media_metadata_file "$_identity")"
+    test ! -r "$_metadata_file" && return 3
+
+    local _metadata_entry="$(grep "^${_tag}:" "$_metadata_file" | tail -n1)"
+    test -z "$_metadata_entry" && return 4
+
+    echo "$_metadata_entry" | sed -r -e "s,^${_tag}:,,"
+    return 0
+}
+
+function media_shelf_link
+{
+    local _identity="$1"
+    test -z "$_identity" && return 1
+
+    local _shelf_path="$(media_shelf "$_identity")"
+    test ! -d "$_shelf_path" && return 2
+
+    local _vault_identity="$(media_metadata_get "$_identity" vault)"
+    test -z "$_vault_identity" && return 3
+
+    local _vault_path="$(media_vault "$_vault_identity")"
+    test ! -d "$_vault_path" && return 4
+
+    local _relative_path="$(media_metadata_get "$_identity" relative_path)"
+    local _full_path="$_vault_path/$_relative_path"
+    test ! -e "$_full_path" && return 5
+
+    local _link_file="$_shelf_path/link"
+    if [ -L "$_link_file" ]; then
+        ! unlink "$_link_file" && return 6
+    fi
+
+    ! ln -s "$_full_path" "$_link_file" && return 7
+    return 0
+}
+
+function media_catalog
+{
+    local _filename="$1"
+    local _identity="$(media_identity "$_filename")"
+
+    if [ -z "$_identity" ]; then
+        return 1
+    fi
+
+    if [ -d "$_filename" ]; then
+        local _vault_identity="$(media_vault "$_identity")"
+
+        ! mkdir -p "$_vault_identity" && return 2
+        ! mv "$_filename"/* "$_vault_identity" && return 3
+
+        media_metadata_set "$_identity" type vault
+
+        find -L "$_vault_identity" -type f | while read _catalog_file; do
+            _file_identity="$(media_identity "$_catalog_file")"
+            _relative_path="$(echo "$_catalog_file" | sed -r -e "s,^$_vault_identity/,,")"
+
+            media_metadata_set "$_file_identity" vault "$_identity"
+            media_metadata_set "$_file_identity" relative_path "$_relative_path"
+            media_catalog "$_catalog_file"
+        done
+    elif [ -r "$_filename" ]; then
+        local _file_vault="$(media_metadata_get "$_identity" vault)"
+        local _last_file="$(echo "$_filename" | awk -F '/' '{ print $NF }')"
+        local _vault_path=""
+
+        if [ -z "$_file_vault" ]; then
+            vault_path="$(media_vault "$_identity")"
+            test -d "$_vault_path" && return 4
+            ! mkdir -p "$_vault_path" && return 5
+
+            media_metadata_set "$_identity" vault "$_identity"
+            media_metadata_set "$_identity" relative_path "$_last_file"
+            
+            ! mv "$_filename" "$_vault_path/$_last_file" && return 6
+        else
+            vault_path="$(media_vault "$_file_vault")"
+        fi
+
+        ! chmod a-w "$_vault_path/$_last_file" && return 7
+        media_shelf_link "$_file_identity"
+    else
+        return 5
+    fi
+}
+
+ORK_MEDIA_LIBRARY="library"
+ORK_MEDIA_ARCHIVE="archive"
+
+ork_reconfigure media
