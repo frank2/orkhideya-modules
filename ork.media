@@ -188,11 +188,11 @@ function media_catalog
             _file_identity="$(media_identity "$_catalog_file")"
             _relative_path="$(echo "$_catalog_file" | sed -r -e "s,^$_vault_identity/,,")"
 
-            media_metadata_set "$_identity" type content
+            media_metadata_set "$_file_identity" type content
             media_metadata_set "$_file_identity" vault "$_identity"
             media_metadata_set "$_file_identity" relative_path "$_relative_path"
 
-            media_catalog "$_catalog_file"
+            ! media_catalog "$_catalog_file" && return 5
         done
 
         echo "$_identity"
@@ -203,25 +203,25 @@ function media_catalog
 
         if [ -z "$_file_vault" ]; then
             _vault_path="$(media_vault "$_identity")"
-            test -d "$_vault_path" && return 4
-            ! mkdir -p "$_vault_path" && return 5
+            test -d "$_vault_path" && return 6
+            ! mkdir -p "$_vault_path" && return 7
 
             media_metadata_set "$_identity" type content
             media_metadata_set "$_identity" vault "$_identity"
             media_metadata_set "$_identity" relative_path "$_last_file"
             
-            ! mv "$_filename" "$_vault_path/$_last_file" && return 6
+            ! mv "$_filename" "$_vault_path/$_last_file" && return 8
         else
             _vault_path="$(media_vault "$_file_vault")"
         fi
 
-        ! chmod a-w "$_vault_path/$_last_file" && return 7
-        media_shelf_link "$_dentity"
+        ! chmod a-w "$_vault_path/$_last_file" && return 9
+        media_shelf_link "$_identity"
 
         echo "$_identity"
         return 0
     else
-        return 5
+        return 10
     fi
 }
 
