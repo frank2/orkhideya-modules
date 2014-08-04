@@ -27,12 +27,24 @@ function media_archive # the archive is for raw data
     return 0
 }
 
+function media_organization # the place for categorizing files
+{
+    ork_pathcat "$(media_root)" "$ORK_MEDIA_ORGANIZATION"
+    return 0
+}
+
+function media_navigation # the place for finding files easily as a result of organization
+{
+    ork_pathcat "$(media_root)" "$ORK_MEDIA_NAVIGATION"
+    return 0
+}
+
 function media_identity
 {
     local _filename="$1"
 
     if [ "$_filename" != "-" -a -d "$_filename" ]; then
-        find -L "$_filename" -type f -exec cat "{}" \; | media_identity -
+        find -L "$_filename" -type f | sort - | xargs cat | media_identity -
         return $?
     elif [ "$_filename" == "-" -o -r "$_filename" ]; then
         sha256sum "$_filename" | awk '{ print $1 }'
@@ -216,17 +228,67 @@ function media_catalog
             _vault_path="$(media_vault "$_file_vault")"
         fi
 
-        ! chmod a-w "$_vault_path/$_last_file" && return 9
+        local _relative_path="$(media_metadata_get "$_identity" relative_path)"
+
+        ! chmod a-w "$_vault_path/$_relative_path" && return 10
         media_shelf_link "$_identity"
 
         echo "$_identity"
         return 0
     else
-        return 10
+        return 11
     fi
+}
+
+function media_organize
+{
+    local _identity="$1"
+    test -z "$_identity" && return 1
+
+    local _method="$2"
+    test -z "$_method" && return 2
+
+    local _class="$(media_metadata_get "$_identity" class)"
+    test -z "$_class" && return 2
+
+    local _subclass="$_class"
+    local _organized="3"
+
+    while [ -n "$_subclass" ]; do
+        local _class_path="$(stdlib_pathify "$_subclass")"
+        local _class_file="$(media_organization)/$_class_path/$_method"
+
+        if [ -x "$_class_file" ]; then
+            "$_class_file" "$_identity"
+            _organized="$?"
+
+            if [ "$_organized" == "0" ]; then
+                break
+            else
+                _organized="3"
+            fi
+        fi
+
+        local _last_class="$(echo "$_subclass" | awk -F '.' '{ print $NF }')"
+        
+        if [ "$_last_class" == "$_subclass" ]; then
+            _subclass=""
+        else
+            _subclass="$(echo "$_subclass" | sed -e "s,\\.$_last_class\$,,")"
+        fi
+    done
+
+    if [ "$_organized" != "0" -a -x "$(media_organization)/$_method" ]; then
+        "$(media_organization)/$_method" "$_identity"
+        _organized="$?"
+    fi
+
+    return "$_organized"
 }
 
 ORK_MEDIA_LIBRARY="library"
 ORK_MEDIA_ARCHIVE="archive"
+ORK_MEDIA_ORGANIZATION="organization"
+ORK_MEDIA_NAVIGATION="navigation"
 
 ork_reconfigure media
