@@ -2,7 +2,6 @@
 
 source orkhideya
 ork_include if
-ork_include iw
 ork_include proc
 ork_include stdlib
 
@@ -84,8 +83,25 @@ function qemu_img_mount
 
    local _mount_args="${@:3}"
    local _image_file="$(qemu_img_file "$_image")"
-   ! qemu_nbd_mount "$_image_file" "$_mountpoint" "$_mount_args" && return 4
+   ! qemu_nbd_mount "$_image_file" "$_mountpoint" "$_mount_args" && return 3
 
+   return 0
+}
+
+function qemu_img_create
+{
+   local _image="$1"
+   qemu_img_exists "$_image" && return 1
+
+   local _size="$2"
+   local _image_file="$(qemu_img_file "$_image")"
+   local _args="${@:3}"
+
+   mkdir -p "$(qemu_img_path "$_image")" 2>/dev/null
+   [ "$?" != "0" ] && return 3
+
+   qemu-img create $_args "$_image_file" $_size
+   [ "$?" != "0" ] && return 3
    return 0
 }
 
