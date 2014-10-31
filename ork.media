@@ -34,12 +34,12 @@ function media_catacomb # the root location where sentinels should place organiz
 
 function media_identity
 {
-    local _filename="$@"
+    local _filename="$(realpath "$@")"
     local _last_file="$(echo "$_filename" | awk -F '/' '{ print $NF }')"
     local _identity=""
 
     if [ "$_filename" != "-" -a -d "$_filename" ]; then
-        _identity="$(find -L "$_filename" -type f | sort - | xargs cat | media_identity -)"
+        _identity="$(find -L "$_filename" -type f -exec cat "{}" \; | sha256sum -b - | awk '{ print $1 }')"
         test -z "$_identity" && return 1
     elif [ "$_filename" == "-" -o -r "$_filename" ]; then
         _identity="$(sha256sum "$_filename" | awk '{ print $1 }')"
@@ -312,7 +312,6 @@ function media_vault_initialize
 
     local _vault_path="$(media_shelf "$_identity")"
 
-    # TODO resolve aliasing issue when files with the same identity appear in the same vault
     find -L "$_filename" -type f | while read _vault_file; do
         local _file_identity="$(media_identity "$_vault_file")"
 
