@@ -34,7 +34,7 @@ function media_catacomb # the root location where sentinels should place organiz
 
 function media_identity
 {
-    local _filename="$1"
+    local _filename="$@"
     local _last_file="$(echo "$_filename" | awk -F '/' '{ print $NF }')"
     local _identity=""
 
@@ -539,7 +539,7 @@ function media_sentinel_order
     local _method_file="$(media_sentinels)/$(stdlib_pathify "$_order")/sentinel"
     ! test -x "$_method_file" && return 2
 
-    ! "$_method_file" ${@:2} && return 3
+    ! "$_method_file" "${@:2}" && return 3
     return 0
  }
 
