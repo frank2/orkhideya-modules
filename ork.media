@@ -21,9 +21,9 @@ function media_archive # the archive is for raw and meta data
     return 0
 }
 
-function media_sentinel # the sentinel is for scripts related to organization
+function media_sentinels # sentinels are scripts related to organization
 {
-    ork_pathcat "$(media_root)" "$ORK_MEDIA_SENTINEL"
+    ork_pathcat "$(media_root)" "$ORK_MEDIA_SENTINELS"
     return 0
 }
 
@@ -430,6 +430,7 @@ function media_vault_export
     local _export_directory="$(realpath "$2")"
     ! test -d "$_export_directory" && return 2
 
+    local _export_links="$3"
     local _conclusive_directory="$_export_directory/$(media_metadata_get "$_vault_identity" alias)"
     ! mkdir -p "$_conclusive_directory" && return 3
 
@@ -448,8 +449,13 @@ function media_vault_export
             local _parent_path="$(echo "$_full_path" | sed -r -e "s,/${_filename}\$,,")"
 
             ! mkdir -p "$_parent_path" && return 7
-            ! cp "$_content_file" "$_full_path" && return 8
-            ! chmod "$_content_mode" "$_full_path" && return 9
+
+            if [ -n "$_export_links" ]; then
+                ! ln -s "$_content_file" "$_full_path" && return 8
+            else
+                ! cp "$_content_file" "$_full_path" && return 9
+                ! chmod "$_content_mode" "$_full_path" && return 10
+            fi
         done
     done
 
@@ -525,54 +531,20 @@ function media_content_revoke_vault
     return 0
 }
 
-function media_consume
-{
-    local _filename="$1"
-    test -z "$_filename" && return 1
-
-    local _err_on_
-
-    local _identity="$(media_identity "$_filename")"
-    test -z "$_identity" && return 2
-
-    if [ -d "$_filename" ]; then
-        find -L "$_filename" -type f | while read _vault_file; do
-            echo
-        done
-    elif [ -r "$_filename" ]; then
-        media_shelved "$_identity" && return 3
-    else
-        return 9
-    fi
-
-    return 0
-}
-
 function media_sentinel_order
 {
     local _order="$1"
-    test -z "$_order" && return 2
+    test -z "$_order" && return 1
 
-    local _identity="$2"
-    test -z "$_identity" && return 1
+    local _method_file="$(media_sentinels)/$(stdlib_pathify "$_order")/sentinel"
+    ! test -x "$_method_file" && return 2
 
-    local _sentinel="$3"
-
-    if [ -z "$_sentinel" ]; then
-        _sentinel="$(media_metadata_get "$_identity" sentinel)"
-    fi
-
-    test -z "$_sentinel" && return 3
-
-    local _method_file="$(media_sentinel)/$(stdlib_pathify "$_sentinel")/$_order"
-    test ! -x "$_method_file" && return 4
-
-    ! "$_method_file" "$_identity" && return 5
+    ! "$_method_file" ${@:2} && return 3
     return 0
-}
+ }
 
 ORK_MEDIA_ARCHIVE="archive"
-ORK_MEDIA_SENTINEL="sentinel"
+ORK_MEDIA_SENTINELS="sentinels"
 ORK_MEDIA_CATACOMB="catacomb"
 ORK_MEDIA_LIST_TOKEN="|"
 ORK_MEDIA_DATASET_TOKEN="|"
