@@ -34,18 +34,23 @@ function media_catacomb # the root location where sentinels should place organiz
 
 function media_identity
 {
-    local _filename="$(realpath "$@")"
+    local _filename="$(realpath "$1")"
     local _last_file="$(echo "$_filename" | awk -F '/' '{ print $NF }')"
     local _identity=""
+    local _alias="$2"
+
+    if [ -z "$_alias" ]; then
+        _alias="$(echo "$_filename" | sed -e 's,/$,,' | awk -F '/' '{ print $NF }')"
+    fi
 
     if [ "$_filename" != "-" -a -d "$_filename" ]; then
-        _identity="$(find -L "$_filename" -type f -exec cat "{}" \; | sha256sum -b - | awk '{ print $1 }')"
+        _identity="$(find -L "$_filename" -type f -exec echo "[${_alias}]" \&\& cat "{}" \; | sha256sum -b - | awk '{ print $1 }')"
         test -z "$_identity" && return 1
     elif [ "$_filename" == "-" -o -r "$_filename" ]; then
-        _identity="$(sha256sum "$_filename" | awk '{ print $1 }')"
+        _identity="$(sha256sum -b "$_filename" | awk '{ print $1 }')"
         test -z "$_identity" && return 2
     else
-        return 2
+        return 3
     fi
 
     if [ "$_filename" != '-' ]; then
@@ -64,7 +69,8 @@ function media_identity_verify
     local _filename="$2"
     ! test -r "$_filename" -o -d "$_filename" && return 2
 
-    local _verify="$(media_identity "$_filename")"
+    local _alias="$(media_metadata_get "$_identity" alias)"
+    local _verify="$(media_identity "$_filename" "$_alias")"
     
     if [ "$_verify" != "$_identity" ]; then
         stdout_error "The identity did not verify. The media may have been modified."
