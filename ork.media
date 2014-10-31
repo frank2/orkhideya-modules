@@ -67,7 +67,7 @@ function media_identity_verify
     test -z "$_identity" && return 1
 
     local _filename="$2"
-    ! test -r "$_filename" -o -d "$_filename" && return 2
+    ! test -r "$_filename" && return 2
 
     local _alias="$(media_metadata_get "$_identity" alias)"
     local _verify="$(media_identity "$_filename" "$_alias")"
