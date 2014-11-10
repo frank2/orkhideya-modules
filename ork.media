@@ -324,7 +324,7 @@ function media_vault_initialize
         media_shelved "$_file_identity" && test -n "$_err_on_exist" && return 5
 
         local _last_file="$(echo "$_vault_file" | awk -F '/' '{ print $NF }')"
-        local _relative_path="$(echo "$_vault_file" | sed -e "s,^${_filename}/,,")"
+        local _relative_path="$(echo "$_vault_file" | cut -b $((${#_filename}+2))-)"
 
         if ! media_shelved "$_file_identity"; then
             ! media_content_initialize "$_file_identity" "$_vault_file" "$_identity" "$_relative_path" && return 6
