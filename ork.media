@@ -451,7 +451,7 @@ function media_vault_export
         media_metadata_get "$_vault_identity" "vault.mappings.${_content_identity}" | media_metadata_dataset_expand | while read _content_mapping; do
             local _full_path="$(echo "$_content_mapping" | sed -e "s,^.,$_conclusive_directory,")"
             local _filename="$(echo "$_full_path" | awk -F '/' '{ print $NF }')"
-            local _parent_path="$(echo "$_full_path" | sed -r -e "s,/${_filename}\$,,")"
+            local _parent_path="$(echo "$_full_path" | cut -b 0-$(( ${#_full_path} - (${#_filename}+2) )))"
 
             ! mkdir -p "$_parent_path" && return 7
 
