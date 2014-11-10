@@ -490,6 +490,13 @@ function media_content_initialize
     media_metadata_set "$_file_identity" type content
     media_metadata_set "$_file_identity" alias "$_content_alias"
     media_metadata_set "$_file_identity" mode "$(stat -c '%a' "$_filename")"
+    media_metadata_set "$_file_identity" mime "$(file --mime-type "$_filename" | awk -F ':' '{ print $2 }' | cut -b 2-)"
+
+    local _extension="$(echo "$_content_alias" | sed -r -e 's,^\.+,,' | awk -F '.' '{ print $NF }' | tr '[:upper:]' '[:lower:]')"
+
+    if [ -n "$_extension" ]; then
+        media_metadata_set "$_file_identity" extension "$_extension"
+    fi
 
     local _content_file="$_content_shelf/file"
     ! cp "$_filename" "$_content_file" && return 6
