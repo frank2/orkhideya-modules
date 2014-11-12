@@ -140,6 +140,7 @@ function media_metadata_set
         ! echo "${_tag}:${_content}" >> "${_metadata_file}.new" && return 4
     fi
 
+    sort -u -o "${_metadata_file}.new" "${_metadata_file}.new"
     ! mv "${_metadata_file}.new" "$_metadata_file" && return 5
     return 0
 }
@@ -155,7 +156,7 @@ function media_metadata_get
     local _metadata_file="$(media_metadata_file "$_identity")"
     test ! -r "$_metadata_file" && return 3
 
-    local _metadata_entry="$(grep "^${_tag}:" "$_metadata_file" | tail -n1)"
+    local _metadata_entry="$(iconv -f ISO-8859-1 -t UTF-8 "$_metadata_file" | grep "^${_tag}:" | tail -n1)"
     test -z "$_metadata_entry" && return 4
 
     echo "$_metadata_entry" | sed -r -e "s,^${_tag}:,,"
